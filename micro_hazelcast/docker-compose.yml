@@ -1,0 +1,119 @@
+version: '3.8'
+
+networks:
+  microservices_net:
+    driver: bridge
+
+services:
+  # --- CLUSTER HAZELCAST ---
+  hz1:
+    image: hazelcast/hazelcast:5.3.6
+    ports:
+      - "5701:5701"
+    environment:
+      - HZ_CLUSTERNAME=dev-cluster
+    networks:
+      - microservices_net
+
+  hz2:
+    image: hazelcast/hazelcast:5.3.6
+    ports:
+      - "5702:5701"
+    environment:
+      - HZ_CLUSTERNAME=dev-cluster
+      - HZ_NETWORK_JOIN_TCP_IP_ENABLED=true
+      - HZ_NETWORK_JOIN_TCP_IP_MEMBERS=hz1:5701
+    networks:
+      - microservices_net
+
+  hz3:
+    image: hazelcast/hazelcast:5.3.6
+    ports:
+      - "5703:5701"
+    environment:
+      - HZ_CLUSTERNAME=dev-cluster
+      - HZ_NETWORK_JOIN_TCP_IP_ENABLED=true
+      - HZ_NETWORK_JOIN_TCP_IP_MEMBERS=hz1:5701
+    networks:
+      - microservices_net
+
+  # --- DB FOR COUNTER SERVICE ---
+  postgres-db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: counter_db
+    ports:
+      - "5432:5432"
+    networks:
+      - microservices_net
+
+  # --- LOGGING SERVICES ---
+  logging-service-1:
+    build: ./logging-service
+    environment:
+      - HZ_ADDRESSES=hz1:5701,hz2:5701,hz3:5701
+      - PORT=8081
+    ports:
+      - "8081:8000"
+    networks:
+      - microservices_net
+    depends_on:
+      - hz1
+
+  logging-service-2:
+    build: ./logging-service
+    environment:
+      - HZ_ADDRESSES=hz1:5701,hz2:5701,hz3:5701
+      - PORT=8082
+    ports:
+      - "8082:8000"
+    networks:
+      - microservices_net
+    depends_on:
+      - hz2
+
+  logging-service-3:
+    build: ./logging-service
+    environment:
+      - HZ_ADDRESSES=hz1:5701,hz2:5701,hz3:5701
+      - PORT=8083
+    ports:
+      - "8083:8000"
+    networks:
+      - microservices_net
+    depends_on:
+      - hz3
+
+  # --- COUNTER SERVICE ---
+  counter-service:
+    build: ./counter-service
+    environment:
+      - DB_HOST=postgres-db
+      - DB_PORT=5432
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - DB_NAME=counter_db
+    ports:
+      - "8085:8000"
+    networks:
+      - microservices_net
+    depends_on:
+      - postgres-db
+
+  # --- FACADE SERVICE ---
+  facade-service:
+    build: ./facade-service
+    ports:
+      - "8080:8080"
+    environment:
+      - LOGGING_SERVICES=http://logging-service-1:8000,http://logging-service-2:8000,http://logging-service-3:8000
+      - COUNTER_SERVICE=http://counter-service:8000
+    networks:
+      - microservices_net
+    depends_on:
+      - logging-service-1
+      - logging-service-2
+      - logging-service-3
+      - counter-service
