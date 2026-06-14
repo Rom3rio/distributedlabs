@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # 1. Service Discovery
+  config-server:
+    build: ./config-server
+    ports:
+      - "8000:8000"
+    networks:
+      - micro_network
+
+  # 2. Database
+  postgres-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: counter_db
+    ports:
+      - "5432:5432"
+    networks:
+      - micro_network
+
+  # 3. Message Queue & Distributed Map (Cluster)
+  hazelcast1:
+    image: hazelcast/hazelcast:5.3.0
+    ports:
+      - "5701:5701"
+    networks:
+      - micro_network
+
+  hazelcast2:
+    image: hazelcast/hazelcast:5.3.0
+    networks:
+      - micro_network
+
+  hazelcast3:
+    image: hazelcast/hazelcast:5.3.0
+    networks:
+      - micro_network
+
+  # 4. Facade Service
+  facade-service:
+    build: ./facade-service
+    ports:
+      - "8080:8080"
+    environment:
+      - CONFIG_SERVER=http://config-server:8000
+      - MY_ADDRESS=facade-service:8080
+      - HZ_ADDRESSES=hazelcast1:5701,hazelcast2:5701,hazelcast3:5701
+    depends_on:
+      - config-server
+      - hazelcast1
+      - hazelcast2
+      - hazelcast3
+    networks:
+      - micro_network
+
+  # 5. Counter Service
+  counter-service:
+    build: ./counter-service
+    ports:
+      - "8084:8000"
+    environment:
+      - CONFIG_SERVER=http://config-server:8000
+      - MY_ADDRESS=counter-service:8000
+      - HZ_ADDRESSES=hazelcast1:5701,hazelcast2:5701,hazelcast3:5701
+      - DB_URL=postgresql://user:password@postgres-db:5432/counter_db
+    depends_on:
+      - config-server
+      - postgres-db
+      - hazelcast1
+    networks:
+      - micro_network
+
+  # 6. Logging Services (3 Instances)
+  logging-service-1:
+    build: ./logging-service
+    ports:
+      - "8081:8000"
+    environment:
+      - CONFIG_SERVER=http://config-server:8000
+      - MY_ADDRESS=logging-service-1:8000
+      - HZ_ADDRESSES=hazelcast1:5701,hazelcast2:5701,hazelcast3:5701
+    depends_on:
+      - config-server
+      - hazelcast1
+    networks:
+      - micro_network
+
+  logging-service-2:
+    build: ./logging-service
+    ports:
+      - "8082:8000"
+    environment:
+      - CONFIG_SERVER=http://config-server:8000
+      - MY_ADDRESS=logging-service-2:8000
+      - HZ_ADDRESSES=hazelcast1:5701,hazelcast2:5701,hazelcast3:5701
+    depends_on:
+      - config-server
+      - hazelcast1
+    networks:
+      - micro_network
+
+  logging-service-3:
+    build: ./logging-service
+    ports:
+      - "8083:8000"
+    environment:
+      - CONFIG_SERVER=http://config-server:8000
+      - MY_ADDRESS=logging-service-3:8000
+      - HZ_ADDRESSES=hazelcast1:5701,hazelcast2:5701,hazelcast3:5701
+    depends_on:
+      - config-server
+      - hazelcast1
+    networks:
+      - micro_network
+
+networks:
+  micro_network:
+    driver: bridge
