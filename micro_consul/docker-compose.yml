@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  consul:
+    image: hashicorp/consul:1.15
+    ports:
+      - "8500:8500"
+    command: "agent -dev -client=0.0.0.0"
+    networks:
+      - micro_network
+
+
+  postgres-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: counter_db
+    ports:
+      - "5432:5432"
+    networks:
+      - micro_network
+
+  hazelcast1:
+    image: hazelcast/hazelcast:5.3.0
+    ports:
+      - "5701:5701"
+    networks:
+      - micro_network
+
+  hazelcast2:
+    image: hazelcast/hazelcast:5.3.0
+    networks:
+      - micro_network
+
+  hazelcast3:
+    image: hazelcast/hazelcast:5.3.0
+    networks:
+      - micro_network
+
+  facade-service:
+    build: ./facade-service
+    ports:
+      - "8080:8080"
+    environment:
+      - CONSUL_URL=http://consul:8500
+      - MY_HOST=facade-service
+      - MY_PORT=8080
+    depends_on:
+      - consul
+      - hazelcast1
+    networks:
+      - micro_network
+
+  counter-service:
+    build: ./counter-service
+    ports:
+      - "8084:8000"
+    environment:
+      - CONSUL_URL=http://consul:8500
+      - MY_HOST=counter-service
+      - MY_PORT=8000
+      - DB_URL=postgresql://user:password@postgres-db:5432/counter_db
+    depends_on:
+      - consul
+      - postgres-db
+      - hazelcast1
+    networks:
+      - micro_network
+
+
+  logging-service-1:
+    build: ./logging-service
+    ports:
+      - "8081:8000"
+    environment:
+      - CONSUL_URL=http://consul:8500
+      - MY_HOST=logging-service-1
+      - MY_PORT=8000
+    depends_on:
+      - consul
+      - hazelcast1
+    networks:
+      - micro_network
+
+  logging-service-2:
+    build: ./logging-service
+    ports:
+      - "8082:8000"
+    environment:
+      - CONSUL_URL=http://consul:8500
+      - MY_HOST=logging-service-2
+      - MY_PORT=8000
+    depends_on:
+      - consul
+      - hazelcast1
+    networks:
+      - micro_network
+
+  logging-service-3:
+    build: ./logging-service
+    ports:
+      - "8083:8000"
+    environment:
+      - CONSUL_URL=http://consul:8500
+      - MY_HOST=logging-service-3
+      - MY_PORT=8000
+    depends_on:
+      - consul
+      - hazelcast1
+    networks:
+      - micro_network
+
+networks:
+  micro_network:
+    driver: bridge
